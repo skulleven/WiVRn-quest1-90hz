@@ -9,6 +9,7 @@ _deps/
 
 build/
 build-*/
+release-packages/
 **/result
 
 __pycache__/

@@ -175,6 +175,7 @@ void hmd_traits::init()
 			panel_width_override = 1440;
 			controller_profile = "oculus-touch-v2";
 			vk_debug_ext_allowed = false; // Quest 1 lies, the extension won't load
+			extra_refresh_rates = {90.0f}; // Quest 1 supports 90Hz via firmware update
 		}
 		else if (device == "hollywood") // Quest 2
 		{
@@ -296,14 +297,18 @@ void hmd_traits::init()
 	        *this,
 	        utils::overloaded{
 	                [](std::string_view name, auto & field) {
-		                if (auto val = env<std::remove_cvref_t<decltype(field)>>(name))
+		                using T = std::remove_cvref_t<decltype(field)>;
+		                if constexpr (!std::is_same_v<T, std::vector<float>>)
 		                {
-			                spdlog::info("\t{} override: {} -> {}", name, field, *val);
-			                field = *val;
-		                }
-		                else
-		                {
-			                spdlog::info("\t{}: {}", name, field);
+			                if (auto val = env<T>(name))
+			                {
+				                spdlog::info("\t{} override: {} -> {}", name, field, *val);
+				                field = *val;
+			                }
+			                else
+			                {
+				                spdlog::info("\t{}: {}", name, field);
+			                }
 		                }
 	                },
 	                [](std::string_view name, XrVersion & field) {
@@ -358,6 +363,12 @@ void hmd_traits::init()
 			                spdlog::info("\t{}: {}", name, i);
 		                }
 	                },
+                    [](std::string_view name, std::vector<float> & field) {
+                        for (const auto & v: field)
+                        {
+                            spdlog::info("\t{}: {}", name, v);
+                        }
+                    },
 	                [](std::string_view, hmd_permissions) {},
 	        });
 }

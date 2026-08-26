@@ -223,6 +223,8 @@ void settings_video(const settings_context & ctx)
 	const std::string disconnect_tip = ctx.in_game ? _C("tooltip for disabled settings", "Disconnect to change this setting.") : std::string{};
 	std::vector<setting> list;
 
+	static bool refresh_rate_failed = false;
+
 	if (const auto rates = ctx.session.get_refresh_rates(); not rates.empty())
 	{
 		int default_rate_index = index(rates, default_config.preferred_refresh_rate).value_or(-1) + 1;
@@ -245,7 +247,11 @@ void settings_video(const settings_context & ctx)
 			        }
 			        else
 			        {
-				        ctx.session.set_refresh_rate(rates[v - 1]);
+				        // Try to set via OpenXR, warn if it fails but still save the preference
+				        if (not ctx.session.set_refresh_rate(rates[v - 1]))
+				        {
+					        refresh_rate_failed = true;
+				        }
 				        config.preferred_refresh_rate = rates[v - 1];
 			        }
 			        config.save();
@@ -297,6 +303,28 @@ void settings_video(const settings_context & ctx)
 
 	ui::page_header(_cS("page header title", "Video"), _cS("page header subtitle", "Frame rate and resolution."));
 	render_settings(ctx, "##video", list);
+
+	if (refresh_rate_failed)
+	{
+		refresh_rate_failed = false;
+		ImGui::OpenPopup("refresh rate unsupported");
+	}
+
+	if (ui::begin_modal("refresh rate unsupported", _C("popup window title", "Disclaimer"), 520))
+	{
+		const auto & t = ui::current();
+		ImGui::PushStyleColor(ImGuiCol_Text, t.text_muted);
+		ImGui::TextWrapped("%s", _C("refresh rate unsupported message", "This option only works if you have a compatible firmware.").c_str());
+		ImGui::PopStyleColor();
+		ImGui::Dummy({0, 12});
+
+		const std::string ok_label = _("OK");
+		const float bw = ui::button_width(ok_label);
+		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - bw);
+		if (ui::button(ok_label, ui::button_style::primary, {bw, 0}))
+			ImGui::CloseCurrentPopup();
+		ui::end_modal();
+	}
 }
 
 void settings_streaming(const settings_context & ctx)

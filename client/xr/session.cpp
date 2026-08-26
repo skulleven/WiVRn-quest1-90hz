@@ -19,6 +19,7 @@
 
 #include "session.h"
 
+#include "application.h"
 #include "details/enumerate.h"
 #include "openxr/openxr.h"
 #include "utils/contains.h"
@@ -285,11 +286,12 @@ float xr::session::get_current_refresh_rate()
 
 std::vector<float> xr::session::get_refresh_rates()
 {
+	std::vector<float> rates;
 	if (xrEnumerateDisplayRefreshRatesFB)
 	{
 		try
 		{
-			return xr::details::enumerate<float>(xrEnumerateDisplayRefreshRatesFB, id);
+			rates = xr::details::enumerate<float>(xrEnumerateDisplayRefreshRatesFB, id);
 		}
 		catch (...)
 		{
@@ -297,17 +299,36 @@ std::vector<float> xr::session::get_refresh_rates()
 		}
 	}
 
-	return {};
+	// Merge in extra rates from hmd_traits (e.g. Quest 1 90Hz)
+	const auto & extra = application::get_hmd_traits().extra_refresh_rates;
+	for (float r: extra)
+	{
+		if (not utils::contains(rates, r))
+			rates.push_back(r);
+	}
+
+	// Always ensure 90Hz is available as an option
+	if (not utils::contains(rates, 90.0f))
+		rates.push_back(90.0f);
+
+	std::ranges::sort(rates);
+
+	return rates;
 }
 
-void xr::session::set_refresh_rate(float refresh_rate)
+bool xr::session::set_refresh_rate(float refresh_rate)
 {
 	if (xrRequestDisplayRefreshRateFB)
 	{
 		spdlog::info("set refresh rate to {}Hz", refresh_rate);
 		if (auto res = xrRequestDisplayRefreshRateFB(id, refresh_rate); res != XR_SUCCESS)
+		{
 			spdlog::warn("Refresh rate change failed: {}", xr::to_string(res));
+			return false;
+		}
+		return true;
 	}
+	return false;
 }
 
 void xr::session::sync_actions(std::span<XrActionSet> action_sets)
